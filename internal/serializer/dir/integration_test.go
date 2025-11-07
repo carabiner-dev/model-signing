@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/carabiner-dev/model-signing/serializer/options"
+	"github.com/carabiner-dev/model-signing/internal/serializer/options"
 )
 
 // TestIntegration_ComplexDirectory tests serialization of a complex directory

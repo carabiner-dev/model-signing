@@ -20,8 +20,8 @@ import (
 	"os"
 	"path/filepath"
 
-	modeldigest "github.com/carabiner-dev/model-signing/serializer/dir"
-	"github.com/carabiner-dev/model-signing/serializer/options"
+	modeldigest "github.com/carabiner-dev/model-signing/internal/serializer/dir"
+	"github.com/carabiner-dev/model-signing/internal/serializer/options"
 )
 
 func ExampleComputeDigest() {

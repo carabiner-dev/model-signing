@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/carabiner-dev/hasher"
-	"github.com/carabiner-dev/model-signing/serializer/options"
+	"github.com/carabiner-dev/model-signing/internal/serializer/options"
 	intoto "github.com/in-toto/attestation/go/v1"
 )
 
