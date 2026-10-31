@@ -8,11 +8,12 @@
 package dir
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/carabiner-dev/model-signing/internal/serializer/options"
+	"github.com/carabiner-dev/model-signing/pkg/serializer/options"
 )
 
 // TestIntegration_ComplexDirectory tests serialization of a complex directory
@@ -133,90 +134,63 @@ func TestIntegration_ComplexDirectory(t *testing.T) {
 	})
 }
 
-// TestIntegration_EmptyDirectory tests handling of an empty directory.
+// TestIntegration_EmptyDirectory checks that an empty model is rejected,
+// as OMS v1.0 section 6.1 requires, instead of yielding the digest of an
+// empty manifest.
 func TestIntegration_EmptyDirectory(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "empty-model-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
-	opts := options.Default()
-	serializer := New(opts)
-	manifest, err := serializer.Serialize(tempDir)
-	if err != nil {
-		t.Fatalf("Serialize failed: %v", err)
+	serializer := New(options.Default())
+	if _, err := serializer.Serialize(tempDir); !errors.Is(err, ErrEmptyModel) {
+		t.Fatalf("expected ErrEmptyModel, got %v", err)
 	}
 
-	if len(manifest.Files) != 0 {
-		t.Errorf("Expected 0 files in empty directory, got %d", len(manifest.Files))
+	// A directory holding only excluded files is empty too.
+	if err := os.WriteFile(filepath.Join(tempDir, ".gitignore"), []byte(".gitkeep\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-
-	// Should still compute a valid root digest (of empty concatenation)
-	rootDigest, err := ComputeRootDigest(manifest)
-	if err != nil {
-		t.Fatalf("ComputeRootDigest failed: %v", err)
-	}
-
-	// SHA256 of empty input
-	expectedEmpty := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	if rootDigest != expectedEmpty {
-		t.Errorf("Expected SHA256 of empty input, got %s", rootDigest)
+	if _, err := serializer.Serialize(tempDir); !errors.Is(err, ErrEmptyModel) {
+		t.Fatalf("expected ErrEmptyModel, got %v", err)
 	}
 }
 
-// TestIntegration_SingleFile tests handling of a model that is a single file.
+// TestIntegration_SingleFile tests a model that is a single file: the
+// manifest records it under its basename and the root digest is the same
+// the file gets when it is the only entry of a directory model.
 func TestIntegration_SingleFile(t *testing.T) {
-	tempFile, err := os.CreateTemp("", "model-*.bin")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tempFile.Name())
-
-	if _, err := tempFile.WriteString("model data"); err != nil {
-		t.Fatalf("Failed to write to temp file: %v", err)
-	}
-	tempFile.Close()
-
-	// Note: Serializer expects a directory, but we test it with a file parent
-	// to ensure proper handling
-	tempDir := filepath.Dir(tempFile.Name())
-	fileName := filepath.Base(tempFile.Name())
-
-	opts := options.Default()
-	opts.IgnoreGitPaths = false // Don't filter anything
-	serializer := New(opts)
-
-	manifest, err := serializer.Serialize(tempFile.Name())
-	if err == nil {
-		t.Logf("Serializing a single file path produced manifest with %d files", len(manifest.Files))
-	}
-
-	// Better approach: create a dir with just one file
-	tempDir2, err := os.MkdirTemp("", "single-file-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir2)
-
-	testFile := filepath.Join(tempDir2, "model.bin")
-	if err := os.WriteFile(testFile, []byte("single model"), 0644); err != nil {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "model.bin")
+	if err := os.WriteFile(testFile, []byte("single model"), 0o644); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	manifest, err = serializer.Serialize(tempDir2)
+	serializer := New(options.Default())
+
+	fileManifest, err := serializer.Serialize(testFile)
+	if err != nil {
+		t.Fatalf("Serialize failed: %v", err)
+	}
+	if len(fileManifest.Files) != 1 || fileManifest.Files[0].Name != "model.bin" {
+		t.Fatalf("expected a single model.bin entry, got %+v", fileManifest.Files)
+	}
+	if fileManifest.ModelName != "model.bin" {
+		t.Errorf("expected model name model.bin, got %s", fileManifest.ModelName)
+	}
+
+	dirManifest, err := serializer.Serialize(tempDir)
 	if err != nil {
 		t.Fatalf("Serialize failed: %v", err)
 	}
 
-	if len(manifest.Files) != 1 {
-		t.Errorf("Expected 1 file, got %d", len(manifest.Files))
+	fileDigest, err := ComputeRootDigest(fileManifest)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	if manifest.Files[0].Name != "model.bin" {
-		t.Errorf("Expected model.bin, got %s", manifest.Files[0].Name)
+	dirDigest, err := ComputeRootDigest(dirManifest)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	_ = tempDir
-	_ = fileName
+	if fileDigest != dirDigest {
+		t.Errorf("single-file digest %s differs from directory digest %s", fileDigest, dirDigest)
+	}
 }

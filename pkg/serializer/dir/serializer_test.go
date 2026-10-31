@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/carabiner-dev/model-signing/internal/serializer/options"
+	"github.com/carabiner-dev/model-signing/pkg/serializer/options"
 )
 
 func TestSerialize(t *testing.T) {
