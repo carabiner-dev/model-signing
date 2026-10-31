@@ -60,7 +60,7 @@ func gitPaths() []string {
 }
 
 // shouldIgnore determines if a path should be ignored based on ignore rules.
-func (s *Serializer) shouldIgnore(path string, modelPath string, ignorePaths []string) (bool, error) {
+func (s *Serializer) shouldIgnore(path, modelPath string, ignorePaths []string) (bool, error) {
 	// Get relative path from model root
 	relPath, err := filepath.Rel(modelPath, path)
 	if err != nil {
@@ -181,7 +181,7 @@ func (s *Serializer) Serialize(modelPath string) (*Manifest, error) {
 	// Sort by path for deterministic ordering. Go compares strings
 	// bytewise, which for UTF-8 names is the code point order OMS calls for.
 	sort.Slice(fileDescriptors, func(i, j int) bool {
-		return fileDescriptors[i].Name < fileDescriptors[j].Name
+		return fileDescriptors[i].GetName() < fileDescriptors[j].GetName()
 	})
 
 	modelName := filepath.Base(absPath)
@@ -290,27 +290,27 @@ func (s *Serializer) enumerate(modelPath, root string) ([]string, error) {
 // in OMS v1.0 section 6.5.1: SHA256(hash1 + hash2 + ... + hashN) where the
 // hashes are the raw digest bytes concatenated in manifest (path) order.
 func ComputeRootDigest(manifest *Manifest) (string, error) {
-	hasher := sha256.New()
+	h := sha256.New()
 
 	// Files are already sorted by path in the manifest
 	for _, file := range manifest.Files {
 		// Get the sha256 hash from the digest map
-		hashValue, ok := file.Digest["sha256"]
+		hashValue, ok := file.GetDigest()["sha256"]
 		if !ok {
-			return "", fmt.Errorf("sha256 digest not found for %s", file.Name)
+			return "", fmt.Errorf("sha256 digest not found for %s", file.GetName())
 		}
 
 		// Decode hex hash to bytes
 		hashBytes, err := hex.DecodeString(hashValue)
 		if err != nil {
-			return "", fmt.Errorf("failed to decode hash for %s: %w", file.Name, err)
+			return "", fmt.Errorf("failed to decode hash for %s: %w", file.GetName(), err)
 		}
 
 		// Write raw hash bytes to the hasher
-		hasher.Write(hashBytes)
+		h.Write(hashBytes)
 	}
 
-	rootHash := hasher.Sum(nil)
+	rootHash := h.Sum(nil)
 	return hex.EncodeToString(rootHash), nil
 }
 

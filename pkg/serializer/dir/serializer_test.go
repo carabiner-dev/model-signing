@@ -1,201 +1,268 @@
 // SPDX-FileCopyrightText: Copyright 2025 Carabiner Systems, Inc
 // SPDX-License-Identifier: Apache-2.0
 
-// Package dir implements a directory serializer and root digest
-// computation for ML models, compatible with the Python
-// model_signing library.
-
 package dir
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/carabiner-dev/model-signing/pkg/serializer/options"
 )
 
-func TestSerialize(t *testing.T) {
-	// Create a temporary test directory
-	tempDir, err := os.MkdirTemp("", "modeldigest-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create test files
-	testFiles := map[string]string{
-		"file1.txt":   "test content 1\n",
-		"file2.txt":   "test content 2\n",
-		"config.json": "config data\n",
-	}
-
-	for name, content := range testFiles {
-		path := filepath.Join(tempDir, name)
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-			t.Fatalf("Failed to create test file %s: %v", name, err)
+// writeModel creates a model directory with the given files (paths use /)
+// under a temp dir and returns its path.
+func writeModel(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), "model")
+	for p, c := range files {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(c), 0o600); err != nil {
+			t.Fatal(err)
 		}
 	}
+	return root
+}
 
-	// Test with default options
-	opts := options.Default()
-	serializer := New(opts)
-	manifest, err := serializer.Serialize(tempDir)
+// names returns the manifest entries' names in manifest order.
+func names(m *Manifest) []string {
+	out := make([]string, 0, len(m.Files))
+	for _, f := range m.Files {
+		out = append(out, f.GetName())
+	}
+	return out
+}
+
+// sampleFiles is a small model with files at several depths.
+var sampleFiles = map[string]string{
+	"file2.txt":   "test content 2\n",
+	"file1.txt":   "test content 1\n",
+	configJSON:    "config data\n",
+	"sub/b.bin":   "b",
+	"sub/a.bin":   "a",
+	"sub/x/c.bin": "c",
+}
+
+func TestSerialize(t *testing.T) {
+	root := writeModel(t, sampleFiles)
+
+	manifest, err := New(options.Default()).Serialize(root)
 	if err != nil {
 		t.Fatalf("Serialize failed: %v", err)
 	}
 
-	// Check that all files were found
-	if len(manifest.Files) != 3 {
-		t.Errorf("Expected 3 files, got %d", len(manifest.Files))
+	want := configJSON + ",file1.txt,file2.txt,sub/a.bin,sub/b.bin,sub/x/c.bin"
+	if got := strings.Join(names(manifest), ","); got != want {
+		t.Errorf("manifest order: got %v want %v", got, want)
 	}
-
-	// Verify files are sorted
-	for i := 0; i < len(manifest.Files)-1; i++ {
-		if manifest.Files[i].Name >= manifest.Files[i+1].Name {
-			t.Errorf("Files not sorted: %s >= %s", manifest.Files[i].Name, manifest.Files[i+1].Name)
+	if manifest.ModelName != "model" {
+		t.Errorf("model name: got %q", manifest.ModelName)
+	}
+	for _, f := range manifest.Files {
+		if len(f.GetDigest()["sha256"]) != 64 {
+			t.Errorf("%s: bad sha256 digest %q", f.GetName(), f.GetDigest()["sha256"])
 		}
 	}
 
-	// Compute root digest
 	rootDigest, err := ComputeRootDigest(manifest)
 	if err != nil {
 		t.Fatalf("ComputeRootDigest failed: %v", err)
 	}
-
-	if rootDigest == "" {
-		t.Error("Root digest is empty")
-	}
-
-	// Verify it's a valid hex string (64 chars for SHA256)
 	if len(rootDigest) != 64 {
 		t.Errorf("Expected 64 character hex string, got %d: %s", len(rootDigest), rootDigest)
+	}
+
+	// The same content in a differently named directory hashes the same.
+	other := writeModel(t, sampleFiles)
+	d1, err := ComputeDigest(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d2, err := ComputeDigest(other, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d1 != d2 || d1 != "sha256:"+rootDigest {
+		t.Errorf("digests differ: %s %s %s", d1, d2, rootDigest)
 	}
 }
 
 func TestIgnorePaths(t *testing.T) {
-	// Create a temporary test directory
-	tempDir, err := os.MkdirTemp("", "modeldigest-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	root := writeModel(t, map[string]string{
+		"keep.txt":          "content1",
+		"drop.txt":          "content2",
+		"sub/nested/d.json": "d",
+		"sub/e.bin":         "e",
+	})
 
-	// Create test files
-	if err := os.WriteFile(filepath.Join(tempDir, "file1.txt"), []byte("content1"), 0644); err != nil {
-		t.Fatalf("Failed to create file1: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "file2.txt"), []byte("content2"), 0644); err != nil {
-		t.Fatalf("Failed to create file2: %v", err)
+	for name, ignore := range map[string][]string{
+		"absolute file":  {filepath.Join(root, "drop.txt")},
+		"relative file":  {"drop.txt"},
+		"trailing slash": {"drop.txt/"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			opts := options.Default()
+			opts.IgnorePaths = ignore
+			manifest, err := New(opts).Serialize(root)
+			if err != nil {
+				t.Fatalf("Serialize failed: %v", err)
+			}
+			want := "keep.txt,sub/e.bin,sub/nested/d.json"
+			if got := strings.Join(names(manifest), ","); got != want {
+				t.Errorf("got %s want %s", got, want)
+			}
+		})
 	}
 
-	// Test ignoring one file
+	// Ignoring a directory drops its whole subtree.
 	opts := options.Default()
-	opts.IgnorePaths = []string{filepath.Join(tempDir, "file2.txt")}
-
-	serializer := New(opts)
-	manifest, err := serializer.Serialize(tempDir)
+	opts.IgnorePaths = []string{filepath.Join(root, "sub", "nested")}
+	manifest, err := New(opts).Serialize(root)
 	if err != nil {
 		t.Fatalf("Serialize failed: %v", err)
 	}
-
-	if len(manifest.Files) != 1 {
-		t.Errorf("Expected 1 file after ignoring, got %d", len(manifest.Files))
+	for _, n := range names(manifest) {
+		if strings.HasPrefix(n, "sub/nested/") {
+			t.Errorf("found file in ignored directory: %s", n)
+		}
 	}
 
-	if manifest.Files[0].Name != "file1.txt" {
-		t.Errorf("Expected file1.txt, got %s", manifest.Files[0].Name)
+	// An ignore path outside the model is harmless.
+	opts.IgnorePaths = []string{filepath.Join(t.TempDir(), "elsewhere")}
+	manifest, err = New(opts).Serialize(root)
+	if err != nil {
+		t.Fatalf("Serialize failed: %v", err)
+	}
+	if len(manifest.Files) != 4 {
+		t.Errorf("expected 4 files, got %v", names(manifest))
 	}
 }
 
 func TestIgnoreGitPaths(t *testing.T) {
-	// Create a temporary test directory
-	tempDir, err := os.MkdirTemp("", "modeldigest-test-*")
+	root := writeModel(t, map[string]string{
+		"file.txt":                 "content",
+		".git/config":              "git config",
+		gitHead:                    "ref: refs/heads/main",
+		gitIgnore:                  "*.pyc",
+		".gitattributes":           "",
+		".github/workflows/ci.yml": "name: CI",
+		"sub/" + gitIgnore:         "kept",
+	})
+
+	// Default: git metadata at the root is excluded, nested is not.
+	manifest, err := New(options.Default()).Serialize(root)
 	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
+		t.Fatalf("Serialize failed: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
-
-	// Create test files including git files
-	if err := os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte("content"), 0644); err != nil {
-		t.Fatalf("Failed to create file: %v", err)
+	if got := strings.Join(names(manifest), ","); got != "file.txt,sub/.gitignore" {
+		t.Errorf("unexpected files: %s", got)
 	}
 
-	if err := os.Mkdir(filepath.Join(tempDir, ".git"), 0755); err != nil {
-		t.Fatalf("Failed to create .git dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, ".git", "config"), []byte("git config"), 0644); err != nil {
-		t.Fatalf("Failed to create .git/config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, ".gitignore"), []byte("*.pyc"), 0644); err != nil {
-		t.Fatalf("Failed to create .gitignore: %v", err)
-	}
-
-	// Test with IgnoreGitPaths = true
 	opts := options.Default()
-	opts.IgnoreGitPaths = true
-
-	serializer := New(opts)
-	manifest, err := serializer.Serialize(tempDir)
-	if err != nil {
-		t.Fatalf("Serialize failed: %v", err)
-	}
-
-	// Should only have file.txt, not .gitignore or .git/config
-	if len(manifest.Files) != 1 {
-		t.Errorf("Expected 1 file, got %d", len(manifest.Files))
-		for _, f := range manifest.Files {
-			t.Logf("  Found file: %s", f.Name)
-		}
-	}
-
-	if manifest.Files[0].Name != "file.txt" {
-		t.Errorf("Expected file.txt, got %s", manifest.Files[0].Name)
-	}
-
-	// Test with IgnoreGitPaths = false
 	opts.IgnoreGitPaths = false
-	serializer = New(opts)
-	manifest, err = serializer.Serialize(tempDir)
+	manifest, err = New(opts).Serialize(root)
 	if err != nil {
 		t.Fatalf("Serialize failed: %v", err)
 	}
-
-	// Should have all files
-	if len(manifest.Files) != 3 {
-		t.Errorf("Expected 3 files, got %d", len(manifest.Files))
-		for _, f := range manifest.Files {
-			t.Logf("  Found file: %s", f.Name)
-		}
+	if len(manifest.Files) != 7 {
+		t.Errorf("expected 7 files, got %v", names(manifest))
 	}
 }
 
 func TestComputeDigest(t *testing.T) {
-	// Create a temporary test directory
-	tempDir, err := os.MkdirTemp("", "modeldigest-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	root := writeModel(t, map[string]string{"test.txt": "test"})
 
-	// Create a test file
-	if err := os.WriteFile(filepath.Join(tempDir, "test.txt"), []byte("test"), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Test ComputeDigest convenience function
-	digest, err := ComputeDigest(tempDir, options.Default())
+	digest, err := ComputeDigest(root, options.Default())
 	if err != nil {
 		t.Fatalf("ComputeDigest failed: %v", err)
 	}
-
-	// Check format
-	if len(digest) < 8 || digest[:7] != "sha256:" {
-		t.Errorf("Expected sha256: prefix, got: %s", digest)
+	if !strings.HasPrefix(digest, "sha256:") || len(digest) != 71 {
+		t.Errorf("expected sha256: plus 64 hex chars, got %q", digest)
 	}
 
-	// Check hash length (sha256: + 64 hex chars = 71 total)
-	if len(digest) != 71 {
-		t.Errorf("Expected 71 characters (sha256: + 64 hex), got %d: %s", len(digest), digest)
+	// nil options mean the defaults.
+	if d, err := ComputeDigest(root, nil); err != nil || d != digest {
+		t.Errorf("nil options: got %s, %v", d, err)
+	}
+
+	if _, err := ComputeDigest(filepath.Join(root, "missing"), nil); err == nil {
+		t.Error("expected an error for a missing path")
+	}
+}
+
+// A model is rejected when nothing is left to hash (OMS section 6.1).
+func TestEmptyModel(t *testing.T) {
+	if _, err := New(nil).Serialize(t.TempDir()); !errors.Is(err, ErrEmptyModel) {
+		t.Fatalf("expected ErrEmptyModel, got %v", err)
+	}
+
+	// A directory holding only excluded files is empty too.
+	root := writeModel(t, map[string]string{gitIgnore: ".gitkeep\n"})
+	if _, err := New(nil).Serialize(root); !errors.Is(err, ErrEmptyModel) {
+		t.Fatalf("expected ErrEmptyModel, got %v", err)
+	}
+}
+
+// A single-file model is recorded under its basename and hashes the same
+// as a directory holding only that file.
+func TestSingleFile(t *testing.T) {
+	root := writeModel(t, map[string]string{modelBin: "single model"})
+	file := filepath.Join(root, modelBin)
+
+	fileManifest, err := New(nil).Serialize(file)
+	if err != nil {
+		t.Fatalf("Serialize failed: %v", err)
+	}
+	if got := names(fileManifest); len(got) != 1 || got[0] != modelBin {
+		t.Fatalf("expected a single %s entry, got %v", modelBin, got)
+	}
+	if fileManifest.ModelName != modelBin {
+		t.Errorf("expected model name %s, got %s", modelBin, fileManifest.ModelName)
+	}
+
+	fileDigest, err := ComputeDigest(file, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirDigest, err := ComputeDigest(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fileDigest != dirDigest {
+		t.Errorf("single-file digest %s differs from directory digest %s", fileDigest, dirDigest)
+	}
+}
+
+// A model path that is a symlink to a directory is followed as the root.
+func TestSymlinkedRoot(t *testing.T) {
+	root := writeModel(t, map[string]string{"a.bin": "a", "sub/b.bin": "b"})
+	link := filepath.Join(t.TempDir(), "linked-model")
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+
+	want, err := ComputeDigest(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(nil).Serialize(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ComputeRootDigest(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if "sha256:"+got != want {
+		t.Errorf("digest through symlink %s differs from %s", got, want)
+	}
+	if m.ModelName != "linked-model" {
+		t.Errorf("model name should be the path given, got %s", m.ModelName)
 	}
 }

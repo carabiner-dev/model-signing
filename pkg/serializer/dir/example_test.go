@@ -1,16 +1,5 @@
-// Copyright 2025 The Sigstore Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-FileCopyrightText: Copyright 2025 Carabiner Systems, Inc
+// SPDX-License-Identifier: Apache-2.0
 
 package dir_test
 
@@ -20,95 +9,50 @@ import (
 	"os"
 	"path/filepath"
 
-	modeldigest "github.com/carabiner-dev/model-signing/pkg/serializer/dir"
+	"github.com/carabiner-dev/model-signing/pkg/serializer/dir"
 	"github.com/carabiner-dev/model-signing/pkg/serializer/options"
 )
 
+// The model is the "simple" fixture of the OMS conformance suite; the
+// digest printed is the subject digest of the signed test vectors
+// published with the spec.
 func ExampleComputeDigest() {
-	// Create a temporary model directory for the example
-	tempDir, err := os.MkdirTemp("", "example-model-*")
+	root, err := os.MkdirTemp("", "simple-*")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.RemoveAll(root) //nolint:errcheck // best effort cleanup
 
-	// Create some model files
-	os.WriteFile(filepath.Join(tempDir, "model.bin"), []byte("model data"), 0644)
-	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"version": "1.0"}`), 0644)
-
-	// Compute digest with default options
-	digest, err := modeldigest.ComputeDigest(tempDir, options.Default())
-	if err != nil {
-		log.Fatal(err)
+	files := map[string]string{"signme-1": "signme-1\n", "signme-2": "signme-2", "ignore-me": ""}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
+			log.Print(err)
+			return
+		}
 	}
 
-	// The digest will be in the format sha256:hash
-	fmt.Printf("Digest format: sha256:...\n")
-	fmt.Printf("Digest length: %d characters\n", len(digest))
-
-	// Output:
-	// Digest format: sha256:...
-	// Digest length: 71 characters
-}
-
-func ExampleSerializer_Serialize() {
-	// Create a temporary model directory
-	tempDir, err := os.MkdirTemp("", "example-model-*")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create model files
-	os.WriteFile(filepath.Join(tempDir, "weights.bin"), []byte("weights"), 0644)
-	os.WriteFile(filepath.Join(tempDir, "metadata.json"), []byte("{}"), 0644)
-
-	// Create serializer
-	serializer := modeldigest.New(options.Default())
-
-	// Serialize the model
-	manifest, err := serializer.Serialize(tempDir)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Print file information
-	fmt.Printf("Model: %s\n", manifest.ModelName)
-	fmt.Printf("Files: %d\n", len(manifest.Files))
-
-	// Files are sorted by path
-	for _, file := range manifest.Files {
-		fmt.Printf("  %s: %s...\n", file.Name, file.Digest["sha256"][:8])
-	}
-}
-
-func ExampleOptions_IgnorePaths() {
-	tempDir, err := os.MkdirTemp("", "example-model-*")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create files including one we want to ignore
-	os.WriteFile(filepath.Join(tempDir, "model.bin"), []byte("model"), 0644)
-	os.WriteFile(filepath.Join(tempDir, "README.md"), []byte("readme"), 0644)
-
-	// Create options to ignore README.md
+	// Leave the signer's ignored file out, as it did.
 	opts := options.Default()
-	opts.IgnorePaths = []string{filepath.Join(tempDir, "README.md")}
+	opts.IgnorePaths = []string{"ignore-me"}
 
-	// Serialize with ignore
-	serializer := modeldigest.New(opts)
-	manifest, err := serializer.Serialize(tempDir)
+	digest, err := dir.ComputeDigest(root, opts)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return
+	}
+	fmt.Println(digest)
+
+	manifest, err := dir.New(opts).Serialize(root)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	for _, f := range manifest.Files {
+		fmt.Printf("%s %s\n", f.GetName(), f.GetDigest()["sha256"])
 	}
 
-	// Only model.bin should be included
-	fmt.Printf("Files included: %d\n", len(manifest.Files))
-	fmt.Printf("First file: %s\n", manifest.Files[0].Name)
-
 	// Output:
-	// Files included: 1
-	// First file: model.bin
+	// sha256:92745110b1ab4368471cbe31664e10174e954b113a3df333db860317b2c6dec4
+	// signme-1 bc9a717db6064a32cbe9eae6fc40651dd6d36ef1757183f590eff2b1765d7ebc
+	// signme-2 32dcb1f8e1ae52d5963e56a6ba06ab58b424c15ed2a6b70d2feca1d089370028
 }
