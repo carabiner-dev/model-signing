@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/carabiner-dev/model-signing/pkg/serializer/options"
 )
 
@@ -150,7 +152,7 @@ func TestIgnoreGitPaths(t *testing.T) {
 		".git/config":              "git config",
 		gitHead:                    "ref: refs/heads/main",
 		gitIgnore:                  "*.pyc",
-		".gitattributes":           "",
+		gitAttrs:                   "",
 		".github/workflows/ci.yml": "name: CI",
 		"sub/" + gitIgnore:         "kept",
 	})
@@ -265,4 +267,27 @@ func TestSymlinkedRoot(t *testing.T) {
 	if m.ModelName != "linked-model" {
 		t.Errorf("model name should be the path given, got %s", m.ModelName)
 	}
+}
+
+// The manifest records the exclusions the way a signer publishes them:
+// relative to the root, defaults included, sorted, without duplicates.
+func TestManifestRecordsSerialization(t *testing.T) {
+	const cBin = "c.bin"
+	root := writeModel(t, map[string]string{"a.bin": "a", "skip/b.bin": "b", cBin: "c"})
+
+	opts := options.Default()
+	opts.IgnorePaths = []string{filepath.Join(root, "skip"), cBin + "/", cBin}
+	m, err := New(opts).Serialize(root)
+	require.NoError(t, err)
+	require.Equal(t, []string{".git", gitAttrs, ".github", gitIgnore, cBin, "skip"}, m.IgnorePaths)
+	require.False(t, m.AllowSymlinks)
+
+	opts = options.Default()
+	opts.IgnoreGitPaths = false
+	opts.AllowSymlinks = true
+	opts.IgnorePaths = []string{filepath.Join(t.TempDir(), "elsewhere")}
+	m, err = New(opts).Serialize(root)
+	require.NoError(t, err)
+	require.Empty(t, m.IgnorePaths)
+	require.True(t, m.AllowSymlinks)
 }
