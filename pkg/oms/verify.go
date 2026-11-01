@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	intoto "github.com/in-toto/attestation/go/v1"
@@ -22,6 +23,10 @@ import (
 
 // VerifyOptions holds the trust material and settings of a verification.
 type VerifyOptions struct {
+	// Method, when set, is the signing method the bundle must have been
+	// produced with; a bundle of another method fails verification.
+	Method Method
+
 	// Keys are the public keys a key bundle may be signed with. The one
 	// matching the bundle's key hint is used.
 	Keys []key.PublicKeyProvider
@@ -101,6 +106,9 @@ func VerifySignature(b *Bundle, opts *VerifyOptions) (*Result, error) {
 		err error
 	)
 	method := b.Method()
+	if opts.Method != MethodUnknown && opts.Method != method {
+		return nil, fmt.Errorf("bundle was signed with the %s method, not %s", method, opts.Method)
+	}
 	switch method {
 	case MethodKey:
 		who, err = verifyWithKey(b, verifier, opts.Keys)
@@ -277,6 +285,13 @@ func verifyWithCertificate(b *Bundle, verifier *signer.Verifier, roots []*x509.C
 	}
 	if now.IsZero() {
 		now = time.Now()
+	}
+	// Go treats a leaf without the extension as valid for any usage;
+	// a signing certificate must say it signs code.
+	if !slices.ContainsFunc(leaf.ExtKeyUsage, func(u x509.ExtKeyUsage) bool {
+		return u == x509.ExtKeyUsageCodeSigning || u == x509.ExtKeyUsageAny
+	}) {
+		return "", errors.New("signing certificate does not carry the code signing extended key usage")
 	}
 	if _, err := leaf.Verify(x509.VerifyOptions{
 		Roots:         rootPool,

@@ -65,6 +65,11 @@ func TestVerifyKeyBundle(t *testing.T) {
 
 	_, err = Verify(root, b, &VerifyOptions{})
 	require.ErrorContains(t, err, "public key is required")
+
+	_, err = Verify(root, b, &VerifyOptions{Method: MethodCertificate, Keys: publicKeys(t, k)})
+	require.ErrorContains(t, err, "signed with the key method, not certificate")
+	_, err = Verify(root, b, &VerifyOptions{Method: MethodKey, Keys: publicKeys(t, k)})
+	require.NoError(t, err)
 }
 
 // A tampered DSSE payload does not verify even with the right key.
@@ -189,12 +194,15 @@ func TestVerifyCertificateBundle(t *testing.T) {
 	_, err = Verify(root, b, &VerifyOptions{})
 	require.ErrorContains(t, err, "trusted CA certificate is required")
 
-	// A leaf without the code signing usage is refused.
-	noEKU := newTestPKI(t, pub.Key, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
-	b, err = NewSigner(s, simpleOptions()).Sign(root, soptions.WithCertificateChain(noEKU.leaf, noEKU.intermediate))
-	require.NoError(t, err)
-	_, err = Verify(root, b, &VerifyOptions{Roots: []*x509.Certificate{noEKU.root}})
-	require.ErrorContains(t, err, "certificate chain")
+	// A leaf with another usage, or with no usage extension at all, is
+	// refused.
+	for name, eku := range map[string][]x509.ExtKeyUsage{"server auth": {x509.ExtKeyUsageServerAuth}, "no EKU": nil} {
+		wrong := newTestPKI(t, pub.Key, eku)
+		b, err = NewSigner(s, simpleOptions()).Sign(root, soptions.WithCertificateChain(wrong.leaf, wrong.intermediate))
+		require.NoError(t, err, name)
+		_, err = Verify(root, b, &VerifyOptions{Roots: []*x509.Certificate{wrong.root}})
+		require.ErrorContains(t, err, "code signing", name)
+	}
 }
 
 // A bundle whose subject digest is not the root digest of its resources
