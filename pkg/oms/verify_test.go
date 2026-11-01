@@ -65,6 +65,11 @@ func TestVerifyKeyBundle(t *testing.T) {
 
 	_, err = Verify(root, b, &VerifyOptions{})
 	require.ErrorContains(t, err, "public key is required")
+
+	_, err = Verify(root, b, &VerifyOptions{Method: MethodCertificate, Keys: publicKeys(t, k)})
+	require.ErrorContains(t, err, "signed with the key method, not certificate")
+	_, err = Verify(root, b, &VerifyOptions{Method: MethodKey, Keys: publicKeys(t, k)})
+	require.NoError(t, err)
 }
 
 // A tampered DSSE payload does not verify even with the right key.

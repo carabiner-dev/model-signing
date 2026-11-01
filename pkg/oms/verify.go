@@ -22,6 +22,10 @@ import (
 
 // VerifyOptions holds the trust material and settings of a verification.
 type VerifyOptions struct {
+	// Method, when set, is the signing method the bundle must have been
+	// produced with; a bundle of another method fails verification.
+	Method Method
+
 	// Keys are the public keys a key bundle may be signed with. The one
 	// matching the bundle's key hint is used.
 	Keys []key.PublicKeyProvider
@@ -101,6 +105,9 @@ func VerifySignature(b *Bundle, opts *VerifyOptions) (*Result, error) {
 		err error
 	)
 	method := b.Method()
+	if opts.Method != MethodUnknown && opts.Method != method {
+		return nil, fmt.Errorf("bundle was signed with the %s method, not %s", method, opts.Method)
+	}
 	switch method {
 	case MethodKey:
 		who, err = verifyWithKey(b, verifier, opts.Keys)

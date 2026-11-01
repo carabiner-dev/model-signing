@@ -126,6 +126,15 @@ signing and verification flags come from
 `oms sign --help` and `oms verify --help` for the sigstore and SPIFFE
 options.
 
+## Conformance
+
+`test/conformance` is the adapter the [OMS conformance suite](https://github.com/ossf/model-signing-spec/tree/main/conformance)
+drives: it maps the suite's `sign-model` and `verify-model` protocol onto
+this module. The suite runs in CI (`.github/workflows/conformance.yaml`),
+which lists the cases expected to fail: sigstore round trips need the
+sigstore staging instance, and bundles from before OMS v1.1.0 identify
+keys by their bytes instead of a hint.
+
 ## Contributing
 
 This module is open source software by [Carabiner Systems](https://carabiner.dev),
