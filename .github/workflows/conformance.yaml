@@ -53,6 +53,8 @@ jobs:
       #    (rawBytes/keyDetails) instead of a hint, which the sigstore
       #    protobuf cannot represent, and v0.2.0 bundles use the deprecated
       #    predicate layout.
+      # The action uploads conformance-report.json as a workflow artifact
+      # itself.
       - name: Run the OMS conformance suite
         uses: ossf/model-signing-spec/conformance@91bf841e8ccf97a3ed97309387e9298d1ac18ba2 # main
         with:
@@ -67,9 +69,3 @@ jobs:
             test_verify[historical/historical-v0.3.1-elliptic-key
             test_verify[historical/historical-v1.0.0-elliptic-key
             test_verify[historical/historical-v1.0.1-elliptic-key
-
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        if: always()
-        with:
-          name: conformance-report
-          path: conformance-report.json
