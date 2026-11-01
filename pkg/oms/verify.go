@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	intoto "github.com/in-toto/attestation/go/v1"
@@ -284,6 +285,13 @@ func verifyWithCertificate(b *Bundle, verifier *signer.Verifier, roots []*x509.C
 	}
 	if now.IsZero() {
 		now = time.Now()
+	}
+	// Go treats a leaf without the extension as valid for any usage;
+	// a signing certificate must say it signs code.
+	if !slices.ContainsFunc(leaf.ExtKeyUsage, func(u x509.ExtKeyUsage) bool {
+		return u == x509.ExtKeyUsageCodeSigning || u == x509.ExtKeyUsageAny
+	}) {
+		return "", errors.New("signing certificate does not carry the code signing extended key usage")
 	}
 	if _, err := leaf.Verify(x509.VerifyOptions{
 		Roots:         rootPool,

@@ -45,7 +45,8 @@ jobs:
       - name: Build the conformance adapter
         run: go build -o bin/conformance ./test/conformance
 
-      # Expected failures:
+      # Expected failures (entries match as prefixes of the test ids, which
+      # continue with the case description, so no closing bracket):
       #  - sigstore round trips sign against the sigstore staging instance,
       #    which the signer does not know.
       #  - bundles produced before OMS v1.1.0 identify keys by their bytes
@@ -57,15 +58,15 @@ jobs:
         with:
           entrypoint: ${{ github.workspace }}/bin/conformance
           xfail: |
-            test_roundtrip[sigstore-ignore-paths]
-            test_roundtrip[sigstore-multi-file]
-            test_roundtrip[sigstore-sig-inside-model]
-            test_roundtrip[sigstore-simple]
-            test_roundtrip[sigstore-single-file]
-            test_verify[historical/historical-v0.2.0-certificate]
-            test_verify[historical/historical-v0.3.1-elliptic-key]
-            test_verify[historical/historical-v1.0.0-elliptic-key]
-            test_verify[historical/historical-v1.0.1-elliptic-key]
+            test_roundtrip[sigstore-ignore-paths
+            test_roundtrip[sigstore-multi-file
+            test_roundtrip[sigstore-sig-inside-model
+            test_roundtrip[sigstore-simple
+            test_roundtrip[sigstore-single-file
+            test_verify[historical/historical-v0.2.0-certificate
+            test_verify[historical/historical-v0.3.1-elliptic-key
+            test_verify[historical/historical-v1.0.0-elliptic-key
+            test_verify[historical/historical-v1.0.1-elliptic-key
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         if: always()
