@@ -6,6 +6,7 @@ require (
 	github.com/carabiner-dev/hasher v0.2.4
 	github.com/in-toto/attestation v1.2.0
 	github.com/policylabs/signer v0.6.6-0.20261101043055-f783108057e3
+	github.com/sigstore/sigstore v1.10.11
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
@@ -70,7 +71,6 @@ require (
 	github.com/sigstore/protobuf-specs v0.5.2 // indirect
 	github.com/sigstore/rekor v1.5.4 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.3.0 // indirect
-	github.com/sigstore/sigstore v1.10.11 // indirect
 	github.com/sigstore/timestamp-authority/v2 v2.1.3 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
