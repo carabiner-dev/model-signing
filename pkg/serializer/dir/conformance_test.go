@@ -19,6 +19,7 @@ const (
 	weightsBin = "weights.bin"
 	gitHead    = ".git/HEAD"
 	gitIgnore  = ".gitignore"
+	gitAttrs   = ".gitattributes"
 	signme1    = "signme-1"
 	signme2    = "signme-2"
 	ignoreMe   = "ignore-me"
@@ -114,7 +115,7 @@ func TestOMSConformanceModels(t *testing.T) {
 			// excluded without being listed as ignore paths.
 			name: "with-git-dir",
 			files: []file{
-				{path: ".gitattributes"},
+				{path: gitAttrs},
 				{path: gitIgnore},
 				{path: modelBin, content: []byte("model data")},
 				{path: gitHead, content: []byte("git object")},

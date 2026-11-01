@@ -35,6 +35,43 @@ empty model is an error. The package is checked against the models of the
 OMS conformance suite, including the one behind the signed test vectors
 published with the spec.
 
+## Signing models
+
+The `pkg/oms` package turns a serialized model into the in-toto statement
+OMS signs (the model's root digest as the subject, the file manifest and the
+serialization settings as the predicate) and signs it into an OMS bundle
+with a [policylabs/signer](https://github.com/policylabs/signer). The
+signing method follows the signer: a key gives a `key` bundle, a key with a
+certificate chain a `certificate` bundle, and the sigstore backend a
+`sigstore` bundle.
+
+```go
+import (
+	"github.com/policylabs/signer"
+	soptions "github.com/policylabs/signer/options"
+
+	"github.com/carabiner-dev/model-signing/pkg/oms"
+	"github.com/carabiner-dev/model-signing/pkg/serializer/options"
+)
+
+s := signer.NewSigner()
+s.Options.Backend = soptions.BackendKey
+s.Options.Keys = []key.PrivateKeyProvider{privateKey}
+
+serOpts := options.Default()
+serOpts.IgnorePaths = []string{"model.sig"}
+
+bundle, err := oms.NewSigner(s, serOpts).Sign("./my-model")
+if err != nil {
+	return err
+}
+err = bundle.Write("./my-model/model.sig")
+```
+
+`oms.ReadBundle` and `oms.ParseBundle` read bundles back, report their
+signing method and decode the statement and predicate. Signature
+verification is left to the signer's verifiers for now.
+
 ## modeldigest CLI
 
 While this project is intended to be used as a library, it ships with a 

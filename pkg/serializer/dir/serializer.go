@@ -34,10 +34,19 @@ import (
 // such models instead of producing the digest of an empty manifest.
 var ErrEmptyModel = errors.New("model contains no regular files after applying exclusions")
 
-// Manifest represents the serialized model with all file hashes.
+// Manifest represents the serialized model with all file hashes, plus
+// the serialization settings a signer records next to them so a
+// verifier can enumerate the model the same way.
 type Manifest struct {
 	ModelName string
 	Files     []*intoto.ResourceDescriptor
+
+	// IgnorePaths are the paths left out of the manifest, relative to
+	// the model root, including the git metadata excluded by default.
+	IgnorePaths []string
+
+	// AllowSymlinks records whether symlinks were followed.
+	AllowSymlinks bool
 }
 
 // Serializer serializes a model directory and computes digests.
@@ -187,9 +196,46 @@ func (s *Serializer) Serialize(modelPath string) (*Manifest, error) {
 	modelName := filepath.Base(absPath)
 
 	return &Manifest{
-		ModelName: modelName,
-		Files:     fileDescriptors,
+		ModelName:     modelName,
+		Files:         fileDescriptors,
+		IgnorePaths:   s.recordedIgnorePaths(absPath, walkRoot),
+		AllowSymlinks: s.opts.AllowSymlinks,
 	}, nil
+}
+
+// recordedIgnorePaths returns the ignore paths as a signer records them:
+// relative to the model root, with the default git exclusions when they
+// apply, sorted and without duplicates. Absolute paths outside the model
+// are left out since they cannot be expressed relative to it.
+func (s *Serializer) recordedIgnorePaths(modelPath, walkRoot string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(p string) {
+		p = strings.TrimSuffix(filepath.ToSlash(p), "/")
+		if p == "" || p == "." || seen[p] {
+			return
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	if s.opts.IgnoreGitPaths {
+		for _, p := range gitPaths() {
+			add(p)
+		}
+	}
+	for _, ignore := range s.opts.IgnorePaths {
+		if !filepath.IsAbs(ignore) {
+			add(ignore)
+			continue
+		}
+		rel, err := filepath.Rel(walkRoot, normalizeIgnorePath(ignore, modelPath, walkRoot))
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		add(rel)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // normalizeIgnorePath rewrites an absolute ignore path so it compares
