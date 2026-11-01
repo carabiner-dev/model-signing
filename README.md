@@ -72,16 +72,30 @@ err = bundle.Write("./my-model/model.sig")
 signing method and decode the statement and predicate. Signature
 verification is left to the signer's verifiers for now.
 
-## modeldigest CLI
+## oms CLI
 
-While this project is intended to be used as a library, it ships with a 
-simple CLI to compute and print the computed digest of a model:
+The module ships a small CLI, `oms`, that exposes the same operations:
 
 ```
-go run ./cmd/modeldigest [-ignore-paths PATH]... [-allow-symlinks] MODEL_PATH
+go install github.com/carabiner-dev/model-signing/cmd/oms@latest
+
+# Print the OMS root digest of a model
+oms digest ./my-model --ignore-path model.sig
+
+# Sign a model with a key into ./my-model/model.sig
+oms sign ./my-model --signing-key key.pem -o ./my-model/model.sig
+
+# Sign with a key and its certificate chain
+oms sign ./my-model --signing-key key.pem --signing-cert cert.pem --signing-cert-chain chain.pem
+
+# Sign with sigstore (the default backend)
+oms sign ./my-model
 ```
 
-Prints the root digest of the model at `MODEL_PATH`.
+A bundle written inside the model is left out of the model's digest, as
+the specification requires. The signing flags come from
+[policylabs/signer](https://github.com/policylabs/signer); run
+`oms sign --help` for the sigstore and SPIFFE options.
 
 ## Contributing
 
