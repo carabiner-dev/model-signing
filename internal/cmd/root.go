@@ -22,11 +22,11 @@ func New() *cobra.Command {
 		Short: "sign AI models following the OpenSSF Model Signing spec",
 		Long: `oms works with AI models following the OpenSSF Model Signing (OMS)
 specification: it computes the digest of a model directory the way OMS
-defines and signs models into OMS bundles with keys, certificates or
-sigstore.`,
+defines, signs models into OMS bundles with keys, certificates or
+sigstore, and verifies models against those bundles.`,
 		SilenceUsage: true,
 	}
-	root.AddCommand(newDigestCommand(), newSignCommand(), version.WithFont("doom"))
+	root.AddCommand(newDigestCommand(), newSignCommand(), newVerifyCommand(), version.WithFont("doom"))
 	return root
 }
 

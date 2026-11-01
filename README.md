@@ -69,8 +69,30 @@ err = bundle.Write("./my-model/model.sig")
 ```
 
 `oms.ReadBundle` and `oms.ParseBundle` read bundles back, report their
-signing method and decode the statement and predicate. Signature
-verification is left to the signer's verifiers for now.
+signing method and decode the statement and predicate.
+
+## Verifying models
+
+`oms.Verify` checks a bundle's signature with the trust material for its
+method and then hashes the model the way the bundle records, comparing
+every file with the signed manifest: listed files must exist with the
+recorded digest and, unless `IgnoreUnsignedFiles` is set, no other file
+may be present. `oms.VerifySignature` does the signature and statement
+checks alone, `oms.VerifyModel` the manifest comparison alone.
+
+```go
+res, err := oms.Verify("./my-model", bundle, &oms.VerifyOptions{
+	Keys:        publicKeys,              // key bundles
+	Roots:       trustedCAs,              // certificate bundles
+	Verifier:    sigstoreVerifier,        // sigstore bundles: identity and roots
+	IgnorePaths: []string{"model.sig"},   // on top of the bundle's ignore paths
+})
+```
+
+Key bundles are matched to the key by the hint the bundle carries;
+certificate bundles need a chain leading to one of the roots with a leaf
+valid at verification time and allowed to sign code; sigstore bundles go
+through the policylabs signer's bundle verifier.
 
 ## oms CLI
 
@@ -90,12 +112,19 @@ oms sign ./my-model --signing-key key.pem --signing-cert cert.pem --signing-cert
 
 # Sign with sigstore (the default backend)
 oms sign ./my-model
+
+# Verify a model against a bundle
+oms verify ./my-model --bundle ./my-model/model.sig --key pub.pem
+oms verify ./my-model --bundle model.sig --certificate-chain ca.pem
+oms verify ./my-model --bundle model.sig --sigstore-identity me@example.com --sigstore-issuer https://accounts.google.com
 ```
 
 A bundle written inside the model is left out of the model's digest, as
-the specification requires. The signing flags come from
+the specification requires, and so is a bundle read from inside it. The
+signing and verification flags come from
 [policylabs/signer](https://github.com/policylabs/signer); run
-`oms sign --help` for the sigstore and SPIFFE options.
+`oms sign --help` and `oms verify --help` for the sigstore and SPIFFE
+options.
 
 ## Contributing
 
