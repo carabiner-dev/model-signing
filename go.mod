@@ -7,8 +7,10 @@ require (
 	github.com/in-toto/attestation v1.2.0
 	github.com/policylabs/signer v0.6.6-0.20261101043055-f783108057e3
 	github.com/sigstore/sigstore-go v1.3.0
+	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	google.golang.org/protobuf v1.36.12
+	sigs.k8s.io/release-utils v0.12.5
 )
 
 require (
@@ -71,7 +73,6 @@ require (
 	github.com/sigstore/sigstore v1.10.11 // indirect
 	github.com/sigstore/timestamp-authority/v2 v2.1.3 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.9.0 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
@@ -96,5 +97,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1 // indirect
 	google.golang.org/grpc v1.85.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	sigs.k8s.io/release-utils v0.12.5 // indirect
 )
