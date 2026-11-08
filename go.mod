@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/carabiner-dev/hasher v0.2.4
 	github.com/in-toto/attestation v1.2.0
-	github.com/policylabs/signer v0.6.6-0.20261101043055-f783108057e3
+	github.com/policylabs/signer v0.6.7
 	github.com/sigstore/sigstore v1.10.11
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/spf13/cobra v1.10.2
