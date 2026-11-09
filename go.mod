@@ -6,7 +6,7 @@ require (
 	github.com/carabiner-dev/hasher v0.2.4
 	github.com/in-toto/attestation v1.2.0
 	github.com/policylabs/signer v0.6.7
-	github.com/sigstore/sigstore v1.11.1
+	github.com/sigstore/sigstore v1.11.3
 	github.com/sigstore/sigstore-go v1.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
