@@ -14,8 +14,7 @@ jobs:
   go-versions:
     runs-on: ubuntu-latest
     outputs:
-      stable: ${{ steps.versions.outputs.GO_MINOR_VERSION_STABLE }}
-      previous: ${{ steps.versions.outputs.GO_MINOR_VERSION_PREVIOUS }}
+      matrix: ${{ steps.matrix.outputs.versions }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -24,6 +23,20 @@ jobs:
     - name: Determine Go versions
       id: versions
       uses: carabiner-dev/actions/go/versions@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # main
+
+    - name: Select supported Go versions
+      id: matrix
+      env:
+        MINIMUM: ${{ steps.versions.outputs.GO_MINOR_VERSION_PROJECT }}
+        PREVIOUS: ${{ steps.versions.outputs.GO_MINOR_VERSION_PREVIOUS }}
+        STABLE: ${{ steps.versions.outputs.GO_MINOR_VERSION_STABLE }}
+      run: |
+        versions=$(jq -cn '
+          (env.MINIMUM | split(".") | map(tonumber)) as $minimum
+          | [env.PREVIOUS, env.STABLE]
+          | map(select((split(".") | map(tonumber)) >= $minimum))
+        ')
+        echo "versions=$versions" >> "$GITHUB_OUTPUT"
 
   test:
     needs: go-versions
@@ -34,9 +47,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version:
-          - ${{ needs.go-versions.outputs.previous }}
-          - ${{ needs.go-versions.outputs.stable }}
+        go-version: ${{ fromJSON(needs.go-versions.outputs.matrix) }}
         os:
           - ubuntu-latest
           - macos-latest
